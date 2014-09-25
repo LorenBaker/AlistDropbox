@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+	android:id="@+id/llList"
+	android:layout_width="match_parent"
+	android:layout_height="match_parent"
+	android:orientation="vertical"
+	android:paddingBottom="@dimen/fragment_vertical_padding"
+	android:paddingLeft="@dimen/fragment_horizontal_padding"
+	android:paddingRight="@dimen/fragment_horizontal_padding"
+	android:paddingTop="@dimen/fragment_vertical_padding" >
+
+	<include
+		android:layout_width="match_parent"
+		android:layout_height="wrap_content"
+		layout="@layout/item_note_input" />
+
+	<ListView
+		android:id="@+id/lvItems"
+		android:layout_width="match_parent"
+		android:layout_height="0dp"
+		android:layout_marginTop="@dimen/items_listView_margin"
+		android:layout_weight="1"
+		android:divider="@null"
+		android:dividerHeight="0dp"
+		android:maxLines="1" >
+	</ListView>
+
+</LinearLayout>

@@ -1,0 +1,22 @@
+<resources>
+
+	<dimen name="fragment_horizontal_padding">8dp</dimen>
+	<dimen name="fragment_vertical_padding">8dp</dimen>
+	<dimen name="fragment_land_horizontal_padding">24dp</dimen>
+	<dimen name="fragment_land_vertical_padding">4dp</dimen>
+	<dimen name="input_edit_text_padding">6dp</dimen>
+	<dimen name="input_edit_text_margin">1dp</dimen>
+	<dimen name="input_edit_text_button_widht">50dp</dimen>
+	<dimen name="items_listView_margin">4dp</dimen>
+	<dimen name="textSizeNormal">17sp</dimen>
+	<dimen name="textSizeDialog">15sp</dimen>
+	<dimen name="textSizeHelp">17sp</dimen>
+	<dimen name="btnPadding">2dp</dimen>
+	<dimen name="dialogMessagePadding">7dp</dimen>
+	<dimen name="dialogEntryBottomPadding">2dp</dimen>
+	<dimen name="dialogEntryLeftPadding">8dp</dimen>
+	<dimen name="dialogEntryRightPadding">2dp</dimen>
+	<dimen name="dialogEntryTopPadding">2dp</dimen>
+	<dimen name="helpTextPadding">3dp</dimen>
+
+</resources>
