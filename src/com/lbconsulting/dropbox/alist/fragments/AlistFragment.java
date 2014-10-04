@@ -4,6 +4,7 @@ import java.util.ArrayList;
 
 import android.app.Activity;
 import android.app.Fragment;
+import android.content.res.Configuration;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -23,18 +24,23 @@ import com.dropbox.sync.android.DbxException;
 import com.dropbox.sync.android.DbxRecord;
 import com.lbconsulting.dropbox.alist.R;
 import com.lbconsulting.dropbox.alist.adapters.ListItemArrayAdapter;
+import com.lbconsulting.dropbox.alist.classes.AlistDropboxEvents.UpdateLists;
 import com.lbconsulting.dropbox.alist.classes.ListsApplication;
 import com.lbconsulting.dropbox.alist.classes.MyLog;
 import com.lbconsulting.dropbox.alist.classes.MySettings;
 import com.lbconsulting.dropbox.alist.database.ItemsTable;
+import com.lbconsulting.dropbox.alist.database.ListsTable;
+
+import de.greenrobot.event.EventBus;
 
 public class AlistFragment extends Fragment implements OnClickListener {
 
 	private ListsApplication app;
 
-	private String mDatastoreID = "";
-	private DbxDatastore mDatastore = null;
-	private int mStyle;
+	private String mListDatastoreID = "";
+	private DbxDatastore mListDatastore = null;
+	private DbxRecord mListRecord = null;
+	private int mStyle = MySettings.STYLE_SHOW_LIST;
 
 	private TextView txtItemName;
 	private TextView txtItemNote;
@@ -51,12 +57,12 @@ public class AlistFragment extends Fragment implements OnClickListener {
 		// Empty constructor
 	}
 
-	public static AlistFragment newInstance(String datastoreID, int style) {
+	public static AlistFragment newInstance(String listDatastoreID, int listStyle) {
 		AlistFragment f = new AlistFragment();
 		// Supply datastoreID input as an argument.
 		Bundle args = new Bundle();
-		args.putString(MySettings.DATASTORE_ID, datastoreID);
-		args.putInt(MySettings.STYLE, style);
+		args.putString(MySettings.LIST_DATASTORE_ID, listDatastoreID);
+		args.putInt(MySettings.LIST_STYLE, listStyle);
 		f.setArguments(args);
 		return f;
 	}
@@ -64,35 +70,66 @@ public class AlistFragment extends Fragment implements OnClickListener {
 	@Override
 	public void onAttach(Activity activity) {
 		super.onAttach(activity);
-		MyLog.i("AlistFragment", "onAttach() datastoreID:" + mDatastoreID);
+		MyLog.i("AlistFragment", "onAttach() datastoreID:" + mListDatastoreID);
 	}
 
 	@Override
 	public void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 
-		MyLog.i("AlistFragment", "onCreate() datastoreID:" + mDatastoreID);
+		MyLog.i("AlistFragment", "onCreate() datastoreID:" + mListDatastoreID);
+	}
+
+	public void onEvent(UpdateLists event) {
+		SaveItemsListViewPosition();
+		mStyle = event.getStyle();
+		updateList();
+	}
+
+	private void updateList() {
+		// TODO Auto-generated method stub
+		if (mListDatastore != null && mListDatastore.isOpen()) {
+			setFramentStyle();
+			// get and then show all items in the list
+			ArrayList<DbxRecord> items = ItemsTable.QueryAsList(mListDatastore, null, MySettings.SORT_ALPHABETICAL);
+			mListItemArrayAdapter = new ListItemArrayAdapter(getActivity(), items, mStyle);
+			mItemsListView.setAdapter(mListItemArrayAdapter);
+
+			// move the list view to its starting position
+			int firstVisiblePosition = (int) mListRecord.getLong(ListsTable.COL_LISTVIEW_FIRST_VISIBLE_POSITION);
+			int top = (int) mListRecord.getLong(ListsTable.COL_LISTVIEW_TOP);
+			mItemsListView.setSelectionFromTop(firstVisiblePosition, top);
+		}
 	}
 
 	@Override
 	public void onSaveInstanceState(Bundle outState) {
-		MyLog.i("AlistFragment", "onSaveInstanceState() datastoreID:" + mDatastoreID);
-		// Store our listID
-		/*		outState.putLong("listID", this.mActiveListID);
-				outState.putLong("storeID", this.mActiveStoreID);*/
+		MyLog.i("AlistFragment", "onSaveInstanceState() datastoreID:" + mListDatastoreID);
+		outState.putString(MySettings.LIST_DATASTORE_ID, this.mListDatastoreID);
+		outState.putInt(MySettings.LIST_STYLE, this.mStyle);
 		super.onSaveInstanceState(outState);
 	}
 
 	@Override
 	public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-		MyLog.i("AlistFragment", "onCreateView() datastoreID:" + mDatastoreID);
-		Bundle bundle = getArguments();
-		if (bundle != null) {
-			mDatastoreID = bundle.getString(MySettings.DATASTORE_ID);
-			mStyle = bundle.getInt(MySettings.STYLE, MySettings.STYLE_SHOW_LIST);
-		}
+		MyLog.i("AlistFragment", "onCreateView() datastoreID:" + mListDatastoreID);
 
+		if (savedInstanceState != null) {
+			if (savedInstanceState.containsKey(MySettings.LIST_DATASTORE_ID)) {
+				mListDatastoreID = savedInstanceState.getString(MySettings.LIST_DATASTORE_ID);
+			}
+			if (savedInstanceState.containsKey(MySettings.LIST_STYLE)) {
+				mStyle = savedInstanceState.getInt(MySettings.LIST_STYLE, MySettings.STYLE_SHOW_LIST);
+			}
+		} else {
+			Bundle bundle = getArguments();
+			if (bundle != null) {
+				mListDatastoreID = bundle.getString(MySettings.LIST_DATASTORE_ID);
+				mStyle = bundle.getInt(MySettings.LIST_STYLE, MySettings.STYLE_SHOW_LIST);
+			}
+		}
 		app = ListsApplication.getInstance();
+		mListRecord = ListsTable.getRecord(mListDatastoreID);
 
 		View view = inflater.inflate(R.layout.frag_lists, container, false);
 
@@ -118,43 +155,73 @@ public class AlistFragment extends Fragment implements OnClickListener {
 			});
 		}
 
+		setFramentStyle();
 		return view;
+
+	}
+
+	private void setFramentStyle() {
+		switch (mStyle) {
+			case MySettings.STYLE_SHOW_LIST:
+				if (llItemNoteInput != null) {
+					llItemNoteInput.setVisibility(View.GONE);
+				}
+				break;
+
+			case MySettings.STYLE_SHOW_MASTER_LIST:
+				if (llItemNoteInput != null) {
+					llItemNoteInput.setVisibility(View.VISIBLE);
+				}
+				break;
+			default:
+				break;
+
+		}
 	}
 
 	@Override
 	public void onActivityCreated(Bundle savedInstanceState) {
-		MyLog.i("AlistFragment", "onActivityCreated() datastoreID:" + mDatastoreID);
+		MyLog.i("AlistFragment", "onActivityCreated() datastoreID:" + mListDatastoreID);
 		super.onActivityCreated(savedInstanceState);
 	}
 
 	@Override
 	public void onStart() {
 		super.onStart();
-		MyLog.i("AlistFragment", "onStart() datastoreID:" + mDatastoreID);
+		MyLog.i("AlistFragment", "onStart() datastoreID:" + mListDatastoreID);
 	}
 
 	@Override
 	public void onResume() {
 		super.onResume();
 
-		MyLog.i("AlistFragment", "onResume() datastoreID:" + mDatastoreID);
+		MyLog.i("AlistFragment", "onResume() datastoreID:" + mListDatastoreID);
+
+		Configuration config = new Configuration();
+		config.setToDefaults();
+		MyLog.d("AlistFragment", "onResume() Config:" + config.toString());
 
 		Bundle bundle = this.getArguments();
 		if (bundle != null) {
-			mDatastoreID = bundle.getString(MySettings.DATASTORE_ID);
-			mStyle = bundle.getInt(MySettings.STYLE, MySettings.STYLE_SHOW_LIST);
+			mListDatastoreID = bundle.getString(MySettings.LIST_DATASTORE_ID);
+			mStyle = bundle.getInt(MySettings.LIST_STYLE, MySettings.STYLE_SHOW_LIST);
 		}
+		if (mListRecord == null) {
+			mListRecord = ListsTable.getRecord(mListDatastoreID);
+		}
+
+		EventBus.getDefault().register(this);
 
 		try {
 			// Open the right datastore (list).
-			mDatastore = app.datastoreManager.openDatastore(mDatastoreID);
+			mListDatastore = app.datastoreManager.openDatastore(mListDatastoreID);
 		} catch (DbxException e) {
-			MyLog.e("AlistFragment", "DbxException openDatastore in onResume() datastoreID:" + mDatastoreID);
+			MyLog.e("AlistFragment", "DbxException openDatastore in onResume() datastoreID:" + mListDatastoreID);
 			e.printStackTrace();
 		}
 
-		if (mDatastore != null) {
-			/*ArrayList<DbxRecord> items = ItemsTable.QueryAsList(mDatastore, null);
+		if (mListDatastore != null && mListDatastore.isOpen()) {
+			/*ArrayList<DbxRecord> items = ItemsTable.QueryAsList(mListDatastore, null);
 			mListItemArrayAdapter = new ListItemArrayAdapter(getActivity(), items, mStyle);
 			mItemsListView.setAdapter(mListItemArrayAdapter);*/
 
@@ -167,7 +234,7 @@ public class AlistFragment extends Fragment implements OnClickListener {
 					Boolean found = false;
 					try {
 						for (DbxDatastoreInfo info : dbxDatastoreManager.listDatastores()) {
-							if (info.id.equals(mDatastoreID)) {
+							if (info.id.equals(mListDatastoreID)) {
 								found = true;
 								break;
 							}
@@ -176,7 +243,7 @@ public class AlistFragment extends Fragment implements OnClickListener {
 						e.printStackTrace();
 					}
 					if (!found) {
-						// TODO: figure out how to remvoe this list!
+						// TODO: figure out how to remove this list!
 						// This datastore has been deleted.
 						// finish();
 						return;
@@ -187,7 +254,7 @@ public class AlistFragment extends Fragment implements OnClickListener {
 			app.datastoreManager.addListListener(mListListener);
 
 			// Listen for changes to this list (datastore).
-			mDatastore.addSyncStatusListener(new DbxDatastore.SyncStatusListener() {
+			mListDatastore.addSyncStatusListener(new DbxDatastore.SyncStatusListener() {
 
 				@Override
 				public void onDatastoreStatusChange(DbxDatastore dbxDatastore) {
@@ -196,55 +263,59 @@ public class AlistFragment extends Fragment implements OnClickListener {
 			});
 			updateList();
 		}
-	}
 
-	protected void updateList() {
-		// TODO Auto-generated method stub
-		if (mDatastore != null) {
-			ArrayList<DbxRecord> items = ItemsTable.QueryAsList(mDatastore, null);
-			mListItemArrayAdapter = new ListItemArrayAdapter(getActivity(), items, mStyle);
-			mItemsListView.setAdapter(mListItemArrayAdapter);
-		}
 	}
 
 	@Override
 	public void onPause() {
 		super.onPause();
 
-		MyLog.i("AlistFragment", "onPause() datastoreID:" + mDatastoreID);
-		mDatastore.close();
-		mDatastore = null;
+		MyLog.i("AlistFragment", "onPause() datastoreID:" + mListDatastoreID);
+
+		// save the list view's position
+		SaveItemsListViewPosition();
+
+		mListDatastore.close();
+		mListDatastore = null;
 		app.datastoreManager.removeListListener(mListListener);
+		EventBus.getDefault().unregister(this);
+	}
+
+	private void SaveItemsListViewPosition() {
+		View v = mItemsListView.getChildAt(0);
+		int top = (v == null) ? 0 : v.getTop();
+		ListsTable.setListViewPosition(mListDatastoreID,
+				mItemsListView.getFirstVisiblePosition(), top);
 	}
 
 	@Override
 	public void onStop() {
 		super.onStop();
-		MyLog.i("AlistFragment", "onStop() datastoreID:" + mDatastoreID);
+		MyLog.i("AlistFragment", "onStop() datastoreID:" + mListDatastoreID);
 	}
 
 	@Override
 	public void onDestroyView() {
 		super.onDestroyView();
-		MyLog.i("AlistFragment", "onDestroyView() datastoreID:" + mDatastoreID);
+		MyLog.i("AlistFragment", "onDestroyView() datastoreID:" + mListDatastoreID);
 	}
 
 	@Override
 	public void onDestroy() {
-		MyLog.i("AlistFragment", "onDestroy() datastoreID:" + mDatastoreID);
+		MyLog.i("AlistFragment", "onDestroy() datastoreID:" + mListDatastoreID);
 		super.onDestroy();
 	}
 
 	@Override
 	public void onDetach() {
 		super.onDetach();
-		MyLog.i("AlistFragment", "onDetach() datastoreID:" + mDatastoreID);
+		MyLog.i("AlistFragment", "onDetach() datastoreID:" + mListDatastoreID);
 	}
 
 	@Override
 	public void onViewCreated(View view, Bundle savedInstanceState) {
 		super.onViewCreated(view, savedInstanceState);
-		MyLog.i("AlistFragment", "onViewCreated() datastoreID:" + mDatastoreID);
+		MyLog.i("AlistFragment", "onViewCreated() datastoreID:" + mListDatastoreID);
 	}
 
 	@Override

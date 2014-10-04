@@ -1,251 +1,363 @@
 package com.lbconsulting.dropbox.alist.activities;
 
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
 
 import android.app.Activity;
+import android.app.Fragment;
 import android.app.FragmentManager;
 import android.app.FragmentTransaction;
 import android.content.Intent;
 import android.os.Bundle;
+import android.view.Menu;
+import android.view.MenuItem;
+import android.widget.Toast;
 
 import com.dropbox.sync.android.DbxAccount;
 import com.dropbox.sync.android.DbxAccountManager;
-import com.dropbox.sync.android.DbxDatastoreInfo;
+import com.dropbox.sync.android.DbxDatastore;
 import com.dropbox.sync.android.DbxDatastoreManager;
 import com.dropbox.sync.android.DbxException;
+import com.dropbox.sync.android.DbxRecord;
 import com.lbconsulting.dropbox.alist.R;
+import com.lbconsulting.dropbox.alist.classes.AlistDropboxEvents.UpdateLists;
 import com.lbconsulting.dropbox.alist.classes.ListsApplication;
+import com.lbconsulting.dropbox.alist.classes.MyLog;
 import com.lbconsulting.dropbox.alist.classes.MySettings;
+import com.lbconsulting.dropbox.alist.database.ListsTable;
+import com.lbconsulting.dropbox.alist.dialogs.ListsDialogFragment;
 import com.lbconsulting.dropbox.alist.fragments.AlistFragment;
+
+import de.greenrobot.event.EventBus;
 
 // Our main activity, which displays a list of lists and allows a user to link or unlink a Dropbox account.
 public class ListsActivity extends Activity {
 
-	DbxAccountManager accountManager;
-	ListsApplication app;
+	private DbxAccountManager mAccountManager = null;
+	private ListsApplication app = null;
+	private static DbxDatastore mAlistDatastore = null;
+	private ArrayList<DbxRecord> mListRecords = null;
 
-	static final int REQUEST_LINK_TO_DBX = 0;
+	public static DbxDatastore getAlistDatastore() {
+		return mAlistDatastore;
+	}
 
-	/*	Button linkUnlinkButton;
-		EditText listInput;*/
+	@Override
+	public void onCreate(Bundle savedInstanceState) {
+		MyLog.i("Lists_ACTIVITY", "onCreate()");
+		super.onCreate(savedInstanceState);
+		setContentView(R.layout.activity_lists);
+
+		this.app = ListsApplication.getInstance();
+		MySettings.setContext(this);
+		setUpAccountManager();
+
+		if (MySettings.isFirstTimeListsActivityShown()) {
+			// Create a new Alist datastore and set its title.
+
+			String alistDatastoreID = MySettings.NOT_AVAILABLE;
+			try {
+				mAlistDatastore = app.datastoreManager.createDatastore();
+				mAlistDatastore.setTitle("AlistDatastore");
+				// Sync (to send the title change).
+				mAlistDatastore.sync();
+				alistDatastoreID = mAlistDatastore.getId();
+
+				Bundle listsActivityBundle = new Bundle();
+				listsActivityBundle.putBoolean(MySettings.STATE_LISTS_ACTIVITY_FIRST_TIME_SHOWN, false);
+				listsActivityBundle.putString(MySettings.STATE_ALIST_DATASTORE_ID, alistDatastoreID);
+				MySettings.set("", listsActivityBundle);
+
+				// CreateNewList();
+
+			} catch (DbxException e) {
+				MyLog.e("Lists_ACTIVITY", "DbxException in Resume() while creating Alist Datastore.");
+				e.printStackTrace();
+			}
+		} else {
+			openAlistDatastore();
+		}
+
+	}
 
 	// Called when the user finishes the linking process.
 	@Override
 	public void onActivityResult(int requestCode, int resultCode, Intent data) {
-		if (requestCode == REQUEST_LINK_TO_DBX) {
+		MyLog.i("Lists_ACTIVITY", "onActivityResult()");
+		if (requestCode == MySettings.REQUEST_LINK_TO_DBX) {
 			if (resultCode == Activity.RESULT_OK) {
-				DbxAccount account = accountManager.getLinkedAccount();
+				DbxAccount account = mAccountManager.getLinkedAccount();
 				try {
 					// Migrate any local datastores.
 					app.datastoreManager.migrateToAccount(account);
 					// Start using the remote datastore manager.
 					app.datastoreManager = DbxDatastoreManager.forAccount(account);
-					setUpListeners();
+					setUpDatastoreChangeListeners();
 				} catch (DbxException e) {
 					e.printStackTrace();
 				}
-				// Swap the button.
-				// linkUnlinkButton.setText("Unlink from Dropbox");
+				// TODO: Show unlink button in the menu
 			}
 		} else {
 			super.onActivityResult(requestCode, resultCode, data);
 		}
 	}
 
-	private void setUpListeners() {
+	private void setUpDatastoreChangeListeners() {
 		app.datastoreManager.addListListener(new DbxDatastoreManager.ListListener() {
 
 			@Override
 			public void onDatastoreListChange(DbxDatastoreManager dbxDatastoreManager) {
-				// Update the UI when the list of datastores changes.
-				// ListsActivity.this.updateList();
+				// TODO: Update for the addition or deletion of a list
 			}
 		});
-		// updateList();
 	}
 
 	@Override
-	public void onCreate(Bundle savedInstanceState) {
-		super.onCreate(savedInstanceState);
+	public boolean onCreateOptionsMenu(Menu menu) {
+		MyLog.i("Lists_ACTIVITY", "onCreateOptionsMenu");
+		getMenuInflater().inflate(R.menu.lists_activity, menu);
+		return true;
+	}
 
-		this.app = ListsApplication.getInstance();
+	@Override
+	public boolean onMenuItemSelected(int featureId, MenuItem item) {
+		// handle item selection
+		switch (item.getItemId()) {
+			case R.id.action_removeStruckOffItems:
+				Toast.makeText(this, "\"" + item.getTitle() + "\"" + " is under construction.", Toast.LENGTH_SHORT)
+						.show();
+				return true;
 
-		setContentView(R.layout.activity_lists);
+			case R.id.action_addItem:
+				/*Toast.makeText(this, "\"" + item.getTitle() + "\"" + " is under construction.", Toast.LENGTH_SHORT)
+						.show();*/
+				EventBus.getDefault().post(new UpdateLists(MySettings.STYLE_SHOW_MASTER_LIST));
+				getActionBar().setDisplayHomeAsUpEnabled(true);
+				return true;
 
-		// Set up the text input that allows adding a new list.
-		/*		listInput = new EditText(this);
-				listInput.setSingleLine();
-				listInput.setHint("Create a new list...");
-				listInput.setSingleLine();
-				listInput.setOnEditorActionListener(new TextView.OnEditorActionListener() {
+			case R.id.action_newList:
+				CreateNewList();
+				return true;
 
-					@Override
-					public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
-						// If the enter key is pressed...
-						if ((actionId & EditorInfo.IME_ACTION_GO) > 0 || (actionId & EditorInfo.IME_ACTION_SEND) > 0 ||
-								(event.getAction() == KeyEvent.ACTION_DOWN &&
-										event.getKeyCode() == KeyEvent.KEYCODE_ENTER && listInput.getText().length() > 0)) {
-							try {
-								// Create a new datastore and set its title.
-								DbxDatastore datastore = app.datastoreManager.createDatastore();
-								datastore.setTitle(listInput.getText().toString());
+			case R.id.action_clearList:
+				Toast.makeText(this, "\"" + item.getTitle() + "\"" + " is under construction.", Toast.LENGTH_SHORT)
+						.show();
+				return true;
 
-								// Sync (to send the title change).
-								datastore.sync();
+			case R.id.action_emailList:
+				Toast.makeText(this, "\"" + item.getTitle() + "\"" + " is under construction.", Toast.LENGTH_SHORT)
+						.show();
+				return true;
 
-								// Close the datastore. (It will be opened again if the user taps on that list.)
-								datastore.close();
-								listInput.setText("");
-								listInput.requestFocus();
-							} catch (DbxException e) {
-								e.printStackTrace();
-							}
-							return true;
-						}
+			case R.id.action_editListTitle:
+				Toast.makeText(this, "\"" + item.getTitle() + "\"" + " is under construction.", Toast.LENGTH_SHORT)
+						.show();
+				return true;
 
-						// We may also get a key up event.
-						if (event.getAction() == KeyEvent.ACTION_UP &&
-								event.getKeyCode() == KeyEvent.KEYCODE_ENTER) {
-							listInput.setText("");
-							listInput.requestFocus();
-							return true;
-						}
-						return false;
-					}
-				});
-				((ListView) findViewById(R.id.listView)).addFooterView(listInput);
+			case R.id.action_deleteList:
+				Toast.makeText(this, "\"" + item.getTitle() + "\"" + " is under construction.", Toast.LENGTH_SHORT)
+						.show();
+				return true;
 
-				linkUnlinkButton = (Button) findViewById(R.id.linkUnlinkButton);*/
+			case R.id.action_Preferences:
+				Toast.makeText(this, "\"" + item.getTitle() + "\"" + " is under construction.", Toast.LENGTH_SHORT)
+						.show();
+				return true;
 
-		// Get the account manager for our app (using our app key and secret).
-		accountManager = DbxAccountManager.getInstance(getApplicationContext(), "gmd9bz0ihf8t30o", "gt6onalc86cbetu");
+			case R.id.action_about:
+				Toast.makeText(this, "\"" + item.getTitle() + "\"" + " is under construction.", Toast.LENGTH_SHORT)
+						.show();
+				return true;
 
-		if (accountManager.hasLinkedAccount()) {
-			// If there's a linked account, use that.
-			try {
-				app.datastoreManager = DbxDatastoreManager.forAccount(accountManager.getLinkedAccount());
-				// linkUnlinkButton.setText("Unlink from Dropbox");
-			} catch (DbxException.Unauthorized unauthorized) {
-				unauthorized.printStackTrace();
-			}
-		} else {
-			// Otherwise, use a local datastore manager.
-			app.datastoreManager = DbxDatastoreManager.localManager(accountManager);
+			case R.id.action_link_to_dropbox:
+				mAccountManager.startLink(ListsActivity.this, MySettings.REQUEST_LINK_TO_DBX);
+				// TODO: show Dropbox unlink in the menu
+				return true;
+
+			case R.id.action_unlink_dropbox:
+				if (mAccountManager.hasLinkedAccount()) {
+					// If we're linked, unlink and start using a local datastore manager again.
+					mAccountManager.unlink();
+					app.datastoreManager = DbxDatastoreManager.localManager(mAccountManager);
+					// TODO: show Dropbox link in the menu
+				}
+				return true;
+
+			default:
+				return super.onMenuItemSelected(featureId, item);
+		}
+	}
+
+	@Override
+	public boolean onOptionsItemSelected(MenuItem item) {
+		switch (item.getItemId()) {
+			case android.R.id.home:
+				EventBus.getDefault().post(new UpdateLists(MySettings.STYLE_SHOW_LIST));
+				getActionBar().setDisplayHomeAsUpEnabled(false);
+				return true;
+			default:
+				return super.onOptionsItemSelected(item);
+
 		}
 
-		setUpListeners();
+	}
 
-		final ListsActivity activity = this;
-		/*		linkUnlinkButton.setOnClickListener(new View.OnClickListener() {
+	private void CreateNewList() {
+		MyLog.i("Lists_ACTIVITY", "CreateNewList()");
+		FragmentManager fm = this.getFragmentManager();
+		// Remove any currently showing dialog
+		Fragment prev = fm.findFragmentByTag("listsDialogFragment");
+		if (prev != null) {
+			FragmentTransaction ft = fm.beginTransaction();
+			ft.remove(prev);
+			ft.commit();
+		}
 
-					@Override
-					public void onClick(View v) {
-						if (!accountManager.hasLinkedAccount()) {
-							// If we're not already linked, start the linking process.
-							accountManager.startLink(activity, REQUEST_LINK_TO_DBX);
-						} else {
-							// If we're linked, unlink and start using a local datastore manager again.
-							accountManager.unlink();
-							app.datastoreManager = DbxDatastoreManager.localManager(accountManager);
-							linkUnlinkButton.setText("Link with Dropbox");
-						}
-					}
-				});*/
+		ListsDialogFragment listsDialogFragment = ListsDialogFragment.newInstance("", ListsDialogFragment.NEW_LIST);
+		listsDialogFragment.show(fm, "listsDialogFragment");
+
+	}
+
+	@Override
+	public boolean onPrepareOptionsMenu(Menu menu) {
+		MyLog.i("Lists_ACTIVITY", "onPrepareOptionsMenu()");
+		if (menu != null) {
+
+		}
+		return true;
 	}
 
 	@Override
 	protected void onResume() {
 		super.onResume();
-
-		ArrayList<DbxDatastoreInfo> infos = new ArrayList<DbxDatastoreInfo>();
-		try {
-			infos.addAll(app.datastoreManager.listDatastores());
-		} catch (DbxException e) {
-			e.printStackTrace();
+		MyLog.i("Lists_ACTIVITY", "onResume()");
+		if (app == null) {
+			this.app = ListsApplication.getInstance();
 		}
-		// Sort by the modified time.
-		Collections.sort(infos,
-				new Comparator<DbxDatastoreInfo>() {
 
-					@Override
-					public int compare(DbxDatastoreInfo a, DbxDatastoreInfo b) {
-						if (a.mtime != null && b.mtime != null) {
-							return a.mtime.compareTo(b.mtime);
-						} else {
-							return a.id.compareTo(b.id);
+		setUpAccountManager();
+		setUpDatastoreChangeListeners();
+		MySettings.setContext(this);
+		openAlistDatastore();
+
+		if (mAlistDatastore != null) {
+			mListRecords = ListsTable.QueryAsList(null, MySettings.SORT_ALPHABETICAL);
+			if (mListRecords != null && mListRecords.size() > 0) {
+				DbxRecord record = mListRecords.get(mListRecords.size() - 1);
+				String datastoreID = record.getString(ListsTable.COL_LIST_DATASTORE_ID);
+				if (!datastoreID.isEmpty()) {
+					AlistFragment fragment = AlistFragment.newInstance(datastoreID, MySettings.STYLE_SHOW_LIST);
+					if (fragment != null) {
+						FragmentManager manager = getFragmentManager();
+						FragmentTransaction ft = manager.beginTransaction();
+						// ft.replace(R.id.content_frame, fragment);
+						ft.replace(R.id.content_frame, fragment, record.getString(ListsTable.COL_LIST_TITLE));
+						ft.setTransition(FragmentTransaction.TRANSIT_FRAGMENT_FADE);
+						ft.commit();
+					}
+
+					getActionBar().setTitle(record.getString(ListsTable.COL_LIST_TITLE));
+				}
+
+			}
+
+		}
+
+		/*		ArrayList<DbxDatastoreInfo> infos = new ArrayList<DbxDatastoreInfo>();
+				// this.app = ListsApplication.getInstance();
+				try {
+					infos.addAll(app.datastoreManager.listDatastores());
+				} catch (DbxException e) {
+					e.printStackTrace();
+				}
+				// Sort by List Title.
+				Collections.sort(infos,
+						new Comparator<DbxDatastoreInfo>() {
+
+							@Override
+							public int compare(DbxDatastoreInfo a, DbxDatastoreInfo b) {
+								if (!a.title.isEmpty() && !b.title.isEmpty()) {
+									return a.title.compareToIgnoreCase(b.title);
+								} else {
+									return a.id.compareTo(b.id);
+								}
+							}
+						});
+
+				if (infos.size() > 0) {
+					String datastoreID = infos.get(1).id;
+					if (!datastoreID.isEmpty()) {
+						AlistFragment fragment = AlistFragment.newInstance(datastoreID, MySettings.STYLE_SHOW_LIST);
+						if (fragment != null) {
+							FragmentManager manager = getFragmentManager();
+							FragmentTransaction ft = manager.beginTransaction();
+							ft.replace(R.id.content_frame, fragment);
+							// ft.replace(R.id.content_frame, fragment, "fragTag");
+							ft.setTransition(FragmentTransaction.TRANSIT_FRAGMENT_FADE);
+							ft.commit();
 						}
 					}
-				});
-
-		if (infos.size() > 0) {
-			String datastoreID = infos.get(0).id;
-			if (!datastoreID.isEmpty()) {
-				AlistFragment fragment = AlistFragment.newInstance(datastoreID, MySettings.STYLE_SHOW_MASTER_LIST);
-				if (fragment != null) {
-					FragmentManager manager = getFragmentManager();
-					FragmentTransaction ft = manager.beginTransaction();
-					ft.replace(R.id.content_frame, fragment);
-					// ft.replace(R.id.content_frame, fragment, "fragTag");
-					ft.setTransition(FragmentTransaction.TRANSIT_FRAGMENT_FADE);
-					ft.commit();
-				}
-			}
-		}
-
-		/*		ListView lv = (ListView) findViewById(R.id.listView);
-				lv.setOnItemClickListener(new AdapterView.OnItemClickListener() {
-
-					@Override
-					public void onItemClick(AdapterView<?> adapter, View v, int position, long arg3) {
-						// When a list is tapped, open the DropboxListActivity, passing in the right datastore ID.
-						Intent intent = new Intent(ListsActivity.this, DropboxListActivity.class);
-						intent.putExtra("com.lbconsulting.dropbox.alist.activities.DSID",
-								((DbxDatastoreInfo) adapter.getItemAtPosition(position)).id);
-						startActivity(intent);
-					}
-				});*/
-		// updateList();
+				}*/
 	}
 
-	// Update the UI based on the current list of datastores.
-	/*	private void updateList() {
-			ListView listView = (ListView) findViewById(R.id.listView);
-			ArrayList<DbxDatastoreInfo> infos = new ArrayList<DbxDatastoreInfo>();
+	private void openAlistDatastore() {
+		String datastoreID = MySettings.getAlistDatastoreID();
+		if (mAlistDatastore == null || !mAlistDatastore.isOpen()) {
 			try {
-				infos.addAll(app.datastoreManager.listDatastores());
+				mAlistDatastore = app.datastoreManager.openDatastore(MySettings.getAlistDatastoreID());
 			} catch (DbxException e) {
+				MyLog.e("Lists_ACTIVITY", "DbxException in openAlistDatastore() while opneing Alist Datastore.");
 				e.printStackTrace();
 			}
-			// Sort by the modified time.
-			Collections.sort(infos,
-					new Comparator<DbxDatastoreInfo>() {
+		}
+	}
 
-						@Override
-						public int compare(DbxDatastoreInfo a, DbxDatastoreInfo b) {
-							if (a.mtime != null && b.mtime != null) {
-								return a.mtime.compareTo(b.mtime);
-							} else {
-								return a.id.compareTo(b.id);
-							}
-						}
-					});
-			ListAdapter adapter = new ListAdapter(infos, this);
-			// Set the handler for when a list should be deleted.
-			adapter.setOnItemDeleted(new OnItemDeletedListener<DbxDatastoreInfo>() {
+	private void setUpAccountManager() {
+		// Get the account manager for our app (using our app key and secret).
+		if (mAccountManager == null) {
+			mAccountManager = DbxAccountManager.getInstance(getApplicationContext(),
+					MySettings.DROPBOX_APP_KEY, MySettings.DROPBOX_APP_SECRET);
+		}
 
-				@Override
-				public void onItemDeleted(DbxDatastoreInfo item) {
-					try {
-						// Delete the datastore.
-						app.datastoreManager.deleteDatastore(item.id);
-					} catch (DbxException e) {
-						e.printStackTrace();
-					}
+		if (app.datastoreManager == null) {
+			if (mAccountManager.hasLinkedAccount()) {
+				// If there's a linked account, use use Dropbox datastores.
+				try {
+					app.datastoreManager = DbxDatastoreManager.forAccount(mAccountManager.getLinkedAccount());
+					// TODO: show unlink menu
+				} catch (DbxException.Unauthorized unauthorizedAccount) {
+					MyLog.e("Lists_ACTIVITY", "Unauthorized account");
+					unauthorizedAccount.printStackTrace();
 				}
-			});
-			listView.setAdapter(adapter);
-			// listInput.requestFocus();
-		}*/
+			} else {
+				// Otherwise, use a local datastore manager.
+				app.datastoreManager = DbxDatastoreManager.localManager(mAccountManager);
+			}
+		}
+	}
+
+	@Override
+	protected void onPause() {
+		MyLog.i("Lists_ACTIVITY", "onPause()");
+		mAlistDatastore.close();
+		super.onPause();
+	}
+
+	@Override
+	protected void onDestroy() {
+		MyLog.i("Lists_ACTIVITY", "onDestroy()");
+		super.onDestroy();
+	}
+
+	@Override
+	protected void onStart() {
+		MyLog.i("Lists_ACTIVITY", "onStart()");
+		super.onStart();
+	}
+
+	@Override
+	protected void onStop() {
+		MyLog.i("Lists_ACTIVITY", "onStop()");
+		super.onStop();
+	}
 }

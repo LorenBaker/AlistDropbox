@@ -1,6 +1,8 @@
 package com.lbconsulting.dropbox.alist.database;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map.Entry;
@@ -15,8 +17,8 @@ import com.dropbox.sync.android.DbxException;
 import com.dropbox.sync.android.DbxFields;
 import com.dropbox.sync.android.DbxRecord;
 import com.dropbox.sync.android.DbxTable;
-import com.lbconsulting.dropbox.alist.classes.ItemRecord;
 import com.lbconsulting.dropbox.alist.classes.MyLog;
+import com.lbconsulting.dropbox.alist.classes.MySettings;
 
 public class ItemsTable {
 
@@ -34,69 +36,63 @@ public class ItemsTable {
 
 	public static final String COL_DATE_TIME_LAST_USED = "dateTimeLastUsed";
 
-	public static final String NOT_AVAILABLE = "**N/A**";
-
-	/*	public static final int SELECTED_TRUE = 1;
-		public static final int SELECTED_FALSE = 0;
-
-		public static final int STRUCKOUT_TRUE = 1;
-		public static final int STRUCKOUT_FALSE = 0;
-
-		public static final int CHECKED_TRUE = 1;
-		public static final int CHECKED_FALSE = 0;
-
-		public static final int MANUAL_SORT_SWITCH_INVISIBLE = 0;
-		public static final int MANUAL_SORT_SWITCH_VISIBLE = 1;
-		public static final int MANUAL_SORT_SWITCH_ITEM_SWITCHED = 2;*/
+	/*		public static final int MANUAL_SORT_SWITCH_INVISIBLE = 0;
+			public static final int MANUAL_SORT_SWITCH_VISIBLE = 1;
+			public static final int MANUAL_SORT_SWITCH_ITEM_SWITCHED = 2;*/
 
 	// /////////////////////////////////////////////////////////////////////////////////////////////////////////
 	// Create Methods
 	// /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 	public static String CreateNewItem(DbxDatastore datastore, String itemName, String itemNote, String groupID) {
-		String newItemID = NOT_AVAILABLE;
+		String newItemID = MySettings.NOT_AVAILABLE;
 
 		if (itemName != null) {
 			itemName = itemName.trim();
 			if (!itemName.isEmpty()) {
+				if (datastore.isOpen()) {
 
-				// determine if the item is already in the database
-				DbxFields queryParams = new DbxFields().set(COL_ITEM_NAME, itemName);
-				DbxTable.QueryResult queryResults = Query(datastore, queryParams);
+					// determine if the item is already in the database
+					DbxFields queryParams = new DbxFields().set(COL_ITEM_NAME, itemName);
+					DbxTable.QueryResult queryResults = Query(datastore, queryParams);
 
-				if (queryResults != null && queryResults.hasResults()) {
-					DbxRecord firstResult = queryResults.iterator().next();
-					newItemID = firstResult.getId();
-					if (!newItemID.isEmpty()) {
-						// the item already exists in the database
-						return newItemID;
+					if (queryResults != null && queryResults.hasResults()) {
+						DbxRecord firstResult = queryResults.iterator().next();
+						newItemID = firstResult.getId();
+						if (!newItemID.isEmpty()) {
+							// the item already exists in the database
+							return newItemID;
+						}
 					}
+
+					// add the item to the database
+					if (itemNote == null) {
+						itemNote = "";
+					}
+
+					if (groupID == null) {
+						groupID = "";
+					}
+
+					DbxFields fields = new DbxFields();
+					fields.set(COL_ITEM_NAME, itemName);
+					fields.set(COL_ITEM_NOTE, itemNote.trim());
+					fields.set(COL_GROUP_ID, groupID);
+
+					// default values
+					fields.set(COL_SELECTED, true);
+					fields.set(COL_STRUCK_OUT, false);
+					fields.set(COL_CHECKED, false);
+
+					fields.set(COL_DATE_TIME_LAST_USED, System.currentTimeMillis());
+
+					// Insert the new record in the "items" table.
+					DbxRecord record = datastore.getTable(TABLE_ITEMS).insert(fields);
+					newItemID = record.getId();
+
+				} else {
+					MyLog.e("ItemsTable", "Unable to create new item. Datastore is not open!");
 				}
-
-				// add the item to the database
-				if (itemNote == null) {
-					itemNote = "";
-				}
-
-				if (groupID == null) {
-					groupID = "";
-				}
-
-				DbxFields fields = new DbxFields();
-				fields.set(COL_ITEM_NAME, itemName);
-				fields.set(COL_ITEM_NOTE, itemNote.trim());
-				fields.set(COL_GROUP_ID, groupID);
-
-				// default values
-				fields.set(COL_SELECTED, true);
-				fields.set(COL_STRUCK_OUT, false);
-				fields.set(COL_CHECKED, false);
-
-				fields.set(COL_DATE_TIME_LAST_USED, System.currentTimeMillis());
-
-				// Insert the new record in the "items" table.
-				DbxRecord record = datastore.getTable(TABLE_ITEMS).insert(fields);
-				newItemID = record.getId();
 
 			} else {
 				MyLog.e("ItemsTable", "Unable to create new item. itemName is empty!");
@@ -127,7 +123,7 @@ public class ItemsTable {
 		return results;
 	}
 
-	public static ArrayList<DbxRecord> QueryAsList(DbxDatastore datastore, DbxFields queryParams) {
+	public static ArrayList<DbxRecord> QueryAsList(DbxDatastore datastore, DbxFields queryParams, int sortOrder) {
 
 		ArrayList<DbxRecord> resultsList = new ArrayList<DbxRecord>();
 		List<DbxRecord> queryResult = null;
@@ -142,6 +138,32 @@ public class ItemsTable {
 			e.printStackTrace();
 		}
 		if (queryResult != null && queryResult.size() > 0) {
+			switch (sortOrder) {
+
+				case MySettings.SORT_ALPHABETICAL:
+					Collections.sort(queryResult, new Comparator<DbxRecord>() {
+
+						@Override
+						public int compare(DbxRecord item1, DbxRecord item2)
+						{
+							return item1.getString(COL_ITEM_NAME).compareToIgnoreCase(item2.getString(COL_ITEM_NAME));
+						}
+					});
+
+					break;
+
+				case MySettings.SORT_MANUAL:
+
+					break;
+
+				case MySettings.SORT_GROUP_THEN_ALPHABETICAL:
+
+					break;
+
+				default:
+					break;
+			}
+
 			resultsList.addAll(queryResult);
 		}
 		return resultsList;
@@ -179,12 +201,8 @@ public class ItemsTable {
 		return result;
 	}
 
-	public static ItemRecord getItemRecord(DbxDatastore datastore, String itemID) {
-		return new ItemRecord(getRecord(datastore, itemID));
-	}
-
 	public static String getItemName(DbxDatastore datastore, String itemID) {
-		String result = NOT_AVAILABLE;
+		String result = MySettings.NOT_AVAILABLE;
 		DbxRecord record = getRecord(datastore, itemID);
 		if (record != null) {
 			result = record.getString(COL_ITEM_NAME);
@@ -193,7 +211,7 @@ public class ItemsTable {
 	}
 
 	public static String getItemNote(DbxDatastore datastore, String itemID) {
-		String result = NOT_AVAILABLE;
+		String result = MySettings.NOT_AVAILABLE;
 		DbxRecord record = getRecord(datastore, itemID);
 		if (record != null) {
 			result = record.getString(COL_ITEM_NOTE);
@@ -202,7 +220,7 @@ public class ItemsTable {
 	}
 
 	public static String getGroupID(DbxDatastore datastore, String itemID) {
-		String result = NOT_AVAILABLE;
+		String result = MySettings.NOT_AVAILABLE;
 		DbxRecord record = getRecord(datastore, itemID);
 		if (record != null) {
 			result = record.getString(COL_GROUP_ID);

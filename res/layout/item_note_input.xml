@@ -3,48 +3,49 @@
 	android:id="@+id/llItemNoteInput"
 	android:layout_width="match_parent"
 	android:layout_height="wrap_content"
-	android:orientation="horizontal" >
+	android:orientation="vertical" >
 
 	<LinearLayout
-		android:layout_width="0dp"
+		android:layout_width="match_parent"
 		android:layout_height="wrap_content"
-		android:layout_weight="1"
-		android:orientation="vertical" >
+		android:orientation="horizontal" >
 
 		<EditText
 			android:id="@+id/txtItemName"
 			style="@style/txtInput"
-			android:layout_width="match_parent"
-			android:layout_height="wrap_content"
+			android:layout_width="0dp"
+			android:layout_height="match_parent"
 			android:layout_margin="@dimen/input_edit_text_margin"
+			android:layout_weight="1"
 			android:hint="Item" />
-
-		<EditText
-			android:id="@+id/txtItemNote"
-			style="@style/txtInput"
-			android:layout_width="match_parent"
-			android:layout_height="wrap_content"
-			android:layout_margin="@dimen/input_edit_text_margin"
-			android:hint="Note" />
-	</LinearLayout>
-
-	<LinearLayout
-		android:layout_width="@dimen/input_edit_text_button_widht"
-		android:layout_height="wrap_content"
-		android:orientation="vertical" >
 
 		<Button
 			android:id="@+id/btnAddToMasterList"
 			style="@style/btnStyle.Genoa"
-			android:layout_width="match_parent"
+			android:layout_width="wrap_content"
 			android:layout_height="wrap_content"
 			android:layout_margin="@dimen/input_edit_text_margin"
 			android:text="Add" />
+	</LinearLayout>
+
+	<LinearLayout
+		android:layout_width="match_parent"
+		android:layout_height="wrap_content"
+		android:orientation="horizontal" >
+
+		<EditText
+			android:id="@+id/txtItemNote"
+			style="@style/txtInput"
+			android:layout_width="0dp"
+			android:layout_height="match_parent"
+			android:layout_margin="@dimen/input_edit_text_margin"
+			android:layout_weight="1"
+			android:hint="Note" />
 
 		<Button
 			android:id="@+id/btnClearEditText"
 			style="@style/btnStyle.Genoa"
-			android:layout_width="match_parent"
+			android:layout_width="wrap_content"
 			android:layout_height="wrap_content"
 			android:layout_margin="@dimen/input_edit_text_margin"
 			android:text="CL" />

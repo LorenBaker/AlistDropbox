@@ -19,14 +19,17 @@
 		<activity
 			android:name="com.dropbox.client2.android.AuthActivity"
 			android:launchMode="singleTask" >
-			<intent-filter>
-				<data android:scheme="db-gmd9bz0ihf8t30o" />
+			
+						<intent-filter>
+				<data android:scheme="db-obn7vqh7n96lidu" />
 
 				<action android:name="android.intent.action.VIEW" />
 
 				<category android:name="android.intent.category.BROWSABLE" />
 				<category android:name="android.intent.category.DEFAULT" />
 			</intent-filter>
+						
+			
 		</activity>
 		<activity
 			android:name="com.lbconsulting.dropbox.alist.activities.DropboxListActivity"
