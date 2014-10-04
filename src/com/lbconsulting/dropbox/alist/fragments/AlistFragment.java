@@ -3,9 +3,9 @@ package com.lbconsulting.dropbox.alist.fragments;
 import java.util.ArrayList;
 
 import android.app.Activity;
-import android.app.Fragment;
-import android.content.res.Configuration;
+import android.os.AsyncTask;
 import android.os.Bundle;
+import android.support.v4.app.Fragment;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.View.OnClickListener;
@@ -87,11 +87,31 @@ public class AlistFragment extends Fragment implements OnClickListener {
 	}
 
 	private void updateList() {
-		// TODO Auto-generated method stub
 		if (mListDatastore != null && mListDatastore.isOpen()) {
 			setFramentStyle();
+			new QueryListDatastore().execute();
+			/*// get and then show all items in the list
+			ArrayList<DbxRecord> items = ItemsTable.QueryAsList(mListDatastore, null, MySettings.SORT_ALPHABETICAL);
+			mListItemArrayAdapter = new ListItemArrayAdapter(getActivity(), items, mStyle);
+			mItemsListView.setAdapter(mListItemArrayAdapter);
+
+			// move the list view to its starting position
+			int firstVisiblePosition = (int) mListRecord.getLong(ListsTable.COL_LISTVIEW_FIRST_VISIBLE_POSITION);
+			int top = (int) mListRecord.getLong(ListsTable.COL_LISTVIEW_TOP);
+			mItemsListView.setSelectionFromTop(firstVisiblePosition, top);*/
+		}
+	}
+
+	private class QueryListDatastore extends AsyncTask<Void, Void, ArrayList<DbxRecord>> {
+
+		@Override
+		protected ArrayList<DbxRecord> doInBackground(Void... arg0) {
 			// get and then show all items in the list
 			ArrayList<DbxRecord> items = ItemsTable.QueryAsList(mListDatastore, null, MySettings.SORT_ALPHABETICAL);
+			return items;
+		}
+
+		protected void onPostExecute(ArrayList<DbxRecord> items) {
 			mListItemArrayAdapter = new ListItemArrayAdapter(getActivity(), items, mStyle);
 			mItemsListView.setAdapter(mListItemArrayAdapter);
 
@@ -197,10 +217,6 @@ public class AlistFragment extends Fragment implements OnClickListener {
 
 		MyLog.i("AlistFragment", "onResume() datastoreID:" + mListDatastoreID);
 
-		Configuration config = new Configuration();
-		config.setToDefaults();
-		MyLog.d("AlistFragment", "onResume() Config:" + config.toString());
-
 		Bundle bundle = this.getArguments();
 		if (bundle != null) {
 			mListDatastoreID = bundle.getString(MySettings.LIST_DATASTORE_ID);
@@ -221,10 +237,6 @@ public class AlistFragment extends Fragment implements OnClickListener {
 		}
 
 		if (mListDatastore != null && mListDatastore.isOpen()) {
-			/*ArrayList<DbxRecord> items = ItemsTable.QueryAsList(mListDatastore, null);
-			mListItemArrayAdapter = new ListItemArrayAdapter(getActivity(), items, mStyle);
-			mItemsListView.setAdapter(mListItemArrayAdapter);*/
-
 			// Set up a listener for when the list of datastores changed.
 			// In it, we'll see if our list was removed, and if so we'll go back in the back stack.
 			mListListener = new DbxDatastoreManager.ListListener() {

@@ -4,10 +4,10 @@ import java.util.ArrayList;
 
 import android.app.Activity;
 import android.app.Dialog;
-import android.app.DialogFragment;
 import android.app.ProgressDialog;
 import android.content.DialogInterface;
 import android.os.Bundle;
+import android.support.v4.app.DialogFragment;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.View.OnClickListener;
@@ -25,7 +25,6 @@ import android.widget.Spinner;
 import com.dropbox.sync.android.DbxDatastore;
 import com.dropbox.sync.android.DbxException;
 import com.lbconsulting.dropbox.alist.R;
-import com.lbconsulting.dropbox.alist.activities.ListsActivity;
 import com.lbconsulting.dropbox.alist.classes.ListsApplication;
 import com.lbconsulting.dropbox.alist.classes.MyLog;
 import com.lbconsulting.dropbox.alist.database.ItemsTable;
@@ -135,15 +134,16 @@ public class ListsDialogFragment extends DialogFragment {
 
 				@Override
 				public void onClick(View v) {
-					// ContentValues newFieldValues = new ContentValues();
+					boolean ERROR_ListTitleAlreadyExists = false;
 					switch (mDialogType) {
 
 						case EDIT_LIST_TITLE:
-							/*							String newListTitle = txtEditListTitle.getText().toString();
-														newListTitle = newListTitle.trim();
-														newFieldValues.put(ListsTable.COL_LIST_TITLE, newListTitle);
-														mListSettings.updateListsTableFieldValues(newFieldValues);
-														EventBus.getDefault().post(new ListTitleChanged(mActiveListID, newListTitle));*/
+							// TODO: EDIT_LIST_TITLE
+							/*	String newListTitle = txtEditListTitle.getText().toString();
+								newListTitle = newListTitle.trim();
+								newFieldValues.put(ListsTable.COL_LIST_TITLE, newListTitle);
+								mListSettings.updateListsTableFieldValues(newFieldValues);
+								EventBus.getDefault().post(new ListTitleChanged(mActiveListID, newListTitle));*/
 							getDialog().dismiss();
 							break;
 
@@ -152,52 +152,50 @@ public class ListsDialogFragment extends DialogFragment {
 							if (!mActiveListTitle.isEmpty()) {
 
 								try {
-									// Create a new datastore and set its title.
-									DbxDatastore listDatastore = app.datastoreManager.createDatastore();
-									listDatastore.setTitle(mActiveListTitle);
+									// Check if there is a list exists with the proposed title
+									if (!ListsTable.ListTitleExists(mActiveListTitle)) {
 
-									// Sync (to send the title change).
-									listDatastore.sync();
+										// Create a new datastore and set its title.
+										DbxDatastore listDatastore = app.datastoreManager.createDatastore();
+										listDatastore.setTitle(mActiveListTitle);
+										// Sync (to send the title change).
+										listDatastore.sync();
 
-									DbxDatastore alistDatastore = ListsActivity.getAlistDatastore();
-									if (alistDatastore != null) {
-										if (alistDatastore.isOpen()) {
-											ListsTable.CreateNewList(mActiveListTitle, listDatastore.getId());
-										} else {
-											MyLog.e("ListsDialogFragment",
-													"btnApply.onClick NEW_LIST: alistDatastore is not open!");
+										// Create a new list in the Alist datastore
+										ListsTable.CreateNewList(mActiveListTitle, listDatastore.getId());
+
+										// Fill the new list with pre-populated items
+										switch (spinListTemplate.getSelectedItemPosition()) {
+											case BLANK_LIST_TEMPLATE:
+												// EventBus.getDefault().post(new NewListCreated(newListID));
+												// getDialog().dismiss();
+												break;
+
+											case GROCERIES_LIST_TEMPLATE:
+												FillGroceriesList(listDatastore);
+												listDatastore.sync();
+												break;
+
+											case TO_DO_LIST_TEMPLATE:
+												// TODO: fill TO_DO list
+												/*	FillToDoList(datastore);
+													EentBus.getDefault().post(new NewListCreated(newListID));
+													getDialog().dismiss();*/
+												break;
+
+											default:
+												break;
 										}
+
+										// Close the datastore. (It will be opened again by its AlistFragment.)
+										listDatastore.close();
+
 									} else {
-										MyLog.e("ListsDialogFragment",
-												"btnApply.onClick NEW_LIST: alistDatastore is null!");
+										ERROR_ListTitleAlreadyExists = true;
 									}
 
-									switch (spinListTemplate.getSelectedItemPosition()) {
-										case BLANK_LIST_TEMPLATE:
-											// EventBus.getDefault().post(new NewListCreated(newListID));
-											// getDialog().dismiss();
-											break;
-
-										case GROCERIES_LIST_TEMPLATE:
-											FillGroceriesList(listDatastore);
-											listDatastore.sync();
-											break;
-
-										case TO_DO_LIST_TEMPLATE:
-											/*											FillToDoList(datastore);
-																						EventBus.getDefault().post(new NewListCreated(newListID));
-																						getDialog().dismiss();*/
-											break;
-
-										default:
-											break;
-									}
-
-									// Close the datastore. (It will be opened again if the user taps on that list.)
-									listDatastore.close();
-									/*									listInput.setText("");
-																		listInput.requestFocus();*/
 								} catch (DbxException e) {
+									MyLog.e("ListsDialogFragment", "onClick(): DbxException while creating NEW_LIST");
 									e.printStackTrace();
 								}
 
@@ -209,6 +207,9 @@ public class ListsDialogFragment extends DialogFragment {
 					}
 
 					getDialog().dismiss();
+					if (ERROR_ListTitleAlreadyExists) {
+						// TODO: Dialog stating that the provided list already exists.
+					}
 				}
 			});
 

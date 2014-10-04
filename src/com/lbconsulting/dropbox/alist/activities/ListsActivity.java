@@ -3,11 +3,14 @@ package com.lbconsulting.dropbox.alist.activities;
 import java.util.ArrayList;
 
 import android.app.Activity;
-import android.app.Fragment;
-import android.app.FragmentManager;
-import android.app.FragmentTransaction;
 import android.content.Intent;
 import android.os.Bundle;
+import android.support.v4.app.Fragment;
+import android.support.v4.app.FragmentActivity;
+import android.support.v4.app.FragmentManager;
+import android.support.v4.app.FragmentTransaction;
+import android.support.v4.view.ViewPager;
+import android.support.v4.view.ViewPager.OnPageChangeListener;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.Toast;
@@ -19,23 +22,27 @@ import com.dropbox.sync.android.DbxDatastoreManager;
 import com.dropbox.sync.android.DbxException;
 import com.dropbox.sync.android.DbxRecord;
 import com.lbconsulting.dropbox.alist.R;
+import com.lbconsulting.dropbox.alist.adapters.ListsPagerAdapter;
 import com.lbconsulting.dropbox.alist.classes.AlistDropboxEvents.UpdateLists;
 import com.lbconsulting.dropbox.alist.classes.ListsApplication;
 import com.lbconsulting.dropbox.alist.classes.MyLog;
 import com.lbconsulting.dropbox.alist.classes.MySettings;
 import com.lbconsulting.dropbox.alist.database.ListsTable;
 import com.lbconsulting.dropbox.alist.dialogs.ListsDialogFragment;
-import com.lbconsulting.dropbox.alist.fragments.AlistFragment;
 
 import de.greenrobot.event.EventBus;
 
 // Our main activity, which displays a list of lists and allows a user to link or unlink a Dropbox account.
-public class ListsActivity extends Activity {
+public class ListsActivity extends FragmentActivity {
 
 	private DbxAccountManager mAccountManager = null;
 	private ListsApplication app = null;
 	private static DbxDatastore mAlistDatastore = null;
 	private ArrayList<DbxRecord> mListRecords = null;
+	private ListsPagerAdapter mListsPagerAdapter = null;
+	private ViewPager mPager = null;
+	private int mListStyle = MySettings.STYLE_SHOW_LIST;
+	private DbxRecord mActiveListRecord = null;
 
 	public static DbxDatastore getAlistDatastore() {
 		return mAlistDatastore;
@@ -45,7 +52,8 @@ public class ListsActivity extends Activity {
 	public void onCreate(Bundle savedInstanceState) {
 		MyLog.i("Lists_ACTIVITY", "onCreate()");
 		super.onCreate(savedInstanceState);
-		setContentView(R.layout.activity_lists);
+		// setContentView(R.layout.activity_lists);
+		setContentView(R.layout.activity_lists_pager);
 
 		this.app = ListsApplication.getInstance();
 		MySettings.setContext(this);
@@ -76,6 +84,31 @@ public class ListsActivity extends Activity {
 		} else {
 			openAlistDatastore();
 		}
+
+		mListsPagerAdapter = new ListsPagerAdapter(getSupportFragmentManager(), mListStyle);
+		mListRecords = ListsTable.QueryAsList(null, MySettings.SORT_ALPHABETICAL);
+		mListsPagerAdapter.setListRecords(mListRecords);
+		mPager = (ViewPager) findViewById(R.id.listsPager);
+		mPager.setAdapter(mListsPagerAdapter);
+		mPager.setOnPageChangeListener(new OnPageChangeListener() {
+
+			@Override
+			public void onPageScrollStateChanged(int state) {
+			}
+
+			@Override
+			public void onPageScrolled(int position, float positionOffset, int positionOffsetPixels) {
+			}
+
+			@Override
+			public void onPageSelected(int position) {
+				// A list page has been selected
+				MyLog.d("Lists_ACTIVITY", "onPageSelected() - position = " + position);
+				mActiveListRecord = mListRecords.get(position);
+				String listTitle = mActiveListRecord.getString(ListsTable.COL_LIST_TITLE);
+				getActionBar().setTitle(listTitle);
+			}
+		});
 
 	}
 
@@ -131,7 +164,9 @@ public class ListsActivity extends Activity {
 			case R.id.action_addItem:
 				/*Toast.makeText(this, "\"" + item.getTitle() + "\"" + " is under construction.", Toast.LENGTH_SHORT)
 						.show();*/
-				EventBus.getDefault().post(new UpdateLists(MySettings.STYLE_SHOW_MASTER_LIST));
+				mListStyle = MySettings.STYLE_SHOW_MASTER_LIST;
+				mListsPagerAdapter.setListStyle(mListStyle);
+				EventBus.getDefault().post(new UpdateLists(mListStyle));
 				getActionBar().setDisplayHomeAsUpEnabled(true);
 				return true;
 
@@ -192,7 +227,9 @@ public class ListsActivity extends Activity {
 	public boolean onOptionsItemSelected(MenuItem item) {
 		switch (item.getItemId()) {
 			case android.R.id.home:
-				EventBus.getDefault().post(new UpdateLists(MySettings.STYLE_SHOW_LIST));
+				mListStyle = MySettings.STYLE_SHOW_LIST;
+				mListsPagerAdapter.setListStyle(mListStyle);
+				EventBus.getDefault().post(new UpdateLists(mListStyle));
 				getActionBar().setDisplayHomeAsUpEnabled(false);
 				return true;
 			default:
@@ -204,7 +241,7 @@ public class ListsActivity extends Activity {
 
 	private void CreateNewList() {
 		MyLog.i("Lists_ACTIVITY", "CreateNewList()");
-		FragmentManager fm = this.getFragmentManager();
+		FragmentManager fm = this.getSupportFragmentManager();
 		// Remove any currently showing dialog
 		Fragment prev = fm.findFragmentByTag("listsDialogFragment");
 		if (prev != null) {
@@ -240,28 +277,28 @@ public class ListsActivity extends Activity {
 		MySettings.setContext(this);
 		openAlistDatastore();
 
-		if (mAlistDatastore != null) {
-			mListRecords = ListsTable.QueryAsList(null, MySettings.SORT_ALPHABETICAL);
-			if (mListRecords != null && mListRecords.size() > 0) {
-				DbxRecord record = mListRecords.get(mListRecords.size() - 1);
-				String datastoreID = record.getString(ListsTable.COL_LIST_DATASTORE_ID);
-				if (!datastoreID.isEmpty()) {
-					AlistFragment fragment = AlistFragment.newInstance(datastoreID, MySettings.STYLE_SHOW_LIST);
-					if (fragment != null) {
-						FragmentManager manager = getFragmentManager();
-						FragmentTransaction ft = manager.beginTransaction();
-						// ft.replace(R.id.content_frame, fragment);
-						ft.replace(R.id.content_frame, fragment, record.getString(ListsTable.COL_LIST_TITLE));
-						ft.setTransition(FragmentTransaction.TRANSIT_FRAGMENT_FADE);
-						ft.commit();
+		/*		if (mAlistDatastore != null) {
+					mListRecords = ListsTable.QueryAsList(null, MySettings.SORT_ALPHABETICAL);
+					if (mListRecords != null && mListRecords.size() > 0) {
+						DbxRecord record = mListRecords.get(mListRecords.size() - 1);
+						String datastoreID = record.getString(ListsTable.COL_LIST_DATASTORE_ID);
+						if (!datastoreID.isEmpty()) {
+							AlistFragment fragment = AlistFragment.newInstance(datastoreID, MySettings.STYLE_SHOW_LIST);
+							if (fragment != null) {
+								FragmentManager manager = getSupportFragmentManager();
+								FragmentTransaction ft = manager.beginTransaction();
+								// ft.replace(R.id.content_frame, fragment);
+								ft.replace(R.id.content_frame, fragment, record.getString(ListsTable.COL_LIST_TITLE));
+								ft.setTransition(FragmentTransaction.TRANSIT_FRAGMENT_FADE);
+								ft.commit();
+							}
+
+							getActionBar().setTitle(record.getString(ListsTable.COL_LIST_TITLE));
+						}
+
 					}
 
-					getActionBar().setTitle(record.getString(ListsTable.COL_LIST_TITLE));
-				}
-
-			}
-
-		}
+				}*/
 
 		/*		ArrayList<DbxDatastoreInfo> infos = new ArrayList<DbxDatastoreInfo>();
 				// this.app = ListsApplication.getInstance();
@@ -339,13 +376,15 @@ public class ListsActivity extends Activity {
 	@Override
 	protected void onPause() {
 		MyLog.i("Lists_ACTIVITY", "onPause()");
-		mAlistDatastore.close();
+
 		super.onPause();
 	}
 
 	@Override
 	protected void onDestroy() {
 		MyLog.i("Lists_ACTIVITY", "onDestroy()");
+		mAlistDatastore.close();
+		mAlistDatastore = null;
 		super.onDestroy();
 	}
 

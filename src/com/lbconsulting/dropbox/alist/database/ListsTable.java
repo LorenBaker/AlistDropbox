@@ -221,6 +221,21 @@ public class ListsTable {
 		return result;
 	}
 
+	public static boolean ListTitleExists(String listTitle) {
+		boolean listTitleExists = false;
+
+		DbxDatastore alistDatastore = ListsActivity.getAlistDatastore();
+		if (alistDatastore != null && alistDatastore.isOpen() && !listTitle.isEmpty()) {
+			DbxFields queryParams = new DbxFields().set(COL_LIST_TITLE, listTitle);
+			DbxTable.QueryResult queryResult = Query(queryParams);
+			if (queryResult != null && queryResult.hasResults()) {
+				listTitleExists = true;
+			}
+		}
+
+		return listTitleExists;
+	}
+
 	// /////////////////////////////////////////////////////////////////////////////////////////////////////////
 	// Update Methods
 	// /////////////////////////////////////////////////////////////////////////////////////////////////////////
